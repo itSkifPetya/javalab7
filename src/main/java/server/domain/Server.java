@@ -65,18 +65,17 @@ public class Server {
                 ssc.socket().bind(new InetSocketAddress(PORT));
                 System.out.println("Сервер запущен на порту " + PORT);
 
+                // Загружаем коллекцию из БД при старте
+                RemoteRepository repo = new RemoteRepository();
+                globalCollection = repo.readData();
+                System.out.println("Коллекция загружена из БД. Готов к работе с командами...");
+
                 Selector selector = Selector.open();
                 ssc.register(selector, SelectionKey.OP_ACCEPT);
 
                 while (true) {
                     int readyChannels = selector.select();
                     if (readyChannels == 0) continue;
-
-                    if (hasFileName) {
-                        Thread consoleThread = new Thread(new ConsoleInputHandler(serializer, "default_collection.csv"));
-                        consoleThread.setDaemon(true); // Поток завершится вместе с основной программой
-                        consoleThread.start();
-                    }
 
                     Set<SelectionKey> selectedKeys = selector.selectedKeys();
                     Iterator<SelectionKey> keyIterator = selectedKeys.iterator();
@@ -116,6 +115,7 @@ public class Server {
 
         // Инициализируем контекст клиента
         ClientContext context = new ClientContext();
+        context.collection = globalCollection; // Теперь у каждого клиента есть ссылка на коллекцию
         clients.put(clientSocketChannel, context);
         System.out.println("Клиент " + clientSocketChannel.getRemoteAddress() + " подключен");
     }
@@ -129,52 +129,13 @@ public class Server {
             return;
         }
 
-        try {
-            switch (context.state) {
-                case WAITING_FILE_NAME:
-                    readFileName(clientSocketChannel, context);
-//                    break;
-                case LOADING_COLLECTION:
-                    loadCollection(context);
-//                    break;
-                case PROCESSING_COMMANDS:
-                    processPool.submit(() -> {
-                        try {
-                            processCommands(clientSocketChannel, context, serializer, invoker, historyKeeper);
-                        } catch (Exception e) {
-                            e.printStackTrace();
-                        }
-                    });
-                    break;
+        processPool.submit(() -> {
+            try {
+                processCommands(clientSocketChannel, context, serializer, invoker, historyKeeper);
+            } catch (Exception e) {
+                e.printStackTrace();
             }
-        } catch (IOException e) {
-            System.err.println("Ошибка обработки клиента: " + e.getMessage());
-            clientSocketChannel.close();
-            clients.remove(clientSocketChannel);
-        }
-    }
-
-    private void readFileName(SocketChannel clientSocketChannel, ClientContext context) throws IOException {
-        ByteBuffer buffer = ByteBuffer.allocate(1024);
-        int bytesRead = clientSocketChannel.read(buffer);
-        if (bytesRead > 0) {
-            buffer.flip();
-            byte[] fileNameBytes = new byte[buffer.remaining()];
-            buffer.get(fileNameBytes);
-            context.fileName = new String(fileNameBytes).trim().strip();
-            fileName = context.fileName;
-            hasFileName = true;
-            System.out.println("Файл: " + context.fileName);
-            context.state = ClientContext.ClientState.LOADING_COLLECTION;
-        }
-    }
-
-    private void loadCollection(ClientContext context) throws IOException {
-        RemoteRepository repo = new RemoteRepository();
-        context.collection = repo.readData();
-        context.state = ClientContext.ClientState.PROCESSING_COMMANDS;
-        Server.globalCollection = context.collection;
-        System.out.println("Готов к работе с командами...");
+        });
     }
 
     private void processCommands(SocketChannel clientSocketChannel, ClientContext context, Serializer serializer, Invoker invoker, HistoryKeeper historyKeeper) throws IOException, ClassNotFoundException, InterruptedException {
@@ -197,6 +158,7 @@ public class Server {
                 // Аутентификация пользователя
                 String username = request.getUsername();
                 String password = request.getPassword();
+                System.out.printf("Пользователь: %s, Пароль: %s%n", username, password);
                 UserRepository userRepo = new UserRepository();
                 boolean authenticated = userRepo.authenticate(username, password);
                 if (!authenticated) {
@@ -218,6 +180,16 @@ public class Server {
                         Response response = request.getCommand().execute(context.collection, newArgs);
                         String cmdName = invoker.getCommandName(request.getCommand());
                         historyKeeper.add(cmdName);
+                        // --- Синхронизация с БД для команд, изменяющих коллекцию ---
+                        String[] modifyingCommands = {"insert", "update", "remove_key", "remove_greater_key", "clear", "replace_if_greater"};
+                        for (String modCmd : modifyingCommands) {
+                            if (cmdName != null && cmdName.equalsIgnoreCase(modCmd) && response.isSuccess()) {
+                                RemoteRepository repo = new RemoteRepository();
+                                repo.writeData(context.collection);
+                                break;
+                            }
+                        }
+                        // --- конец блока синхронизации ---
                         sendPool.submit(() -> {
                             try {
                                 byte[] responseBytes = serializer.serialize(response);
@@ -262,30 +234,4 @@ public class Server {
             PROCESSING_COMMANDS
         }
     }
-
-    private static class ConsoleInputHandler implements Runnable {
-        private final Serializer serializer;
-        private final String fileName;
-
-        public ConsoleInputHandler(Serializer serializer, String fileName) {
-            this.serializer = serializer;
-            this.fileName = fileName;
-        }
-
-        @Override
-        public void run() {
-            Scanner consoleScanner = new Scanner(System.in);
-            while (true) {
-                String input = consoleScanner.nextLine().trim();
-                if ("save".equalsIgnoreCase(input)) {
-                    RemoteRepository repo = new RemoteRepository();
-                    repo.writeData(globalCollection);
-                    System.out.println("Коллекция успешно сохранена.");
-                } else {
-                    System.out.println("Неизвестная команда: " + input);
-                }
-            }
-        }
-    }
 }
-

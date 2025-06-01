@@ -32,7 +32,8 @@ public class UserRepository implements UserDAO {
             ps.executeUpdate();
             return true;
         } catch (SQLException e) {
-            // username уже существует
+            // username уже существует или другая ошибка SQL
+            e.printStackTrace(); // Логируем ошибку для диагностики
             return false;
         }
     }
