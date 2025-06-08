@@ -5,8 +5,8 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>org.itskifpetya</groupId>
-    <artifactId>JavaLab7-t1</artifactId>
-    <version>1.0-SNAPSHOT</version>
+    <artifactId>jl7</artifactId>
+    <version>1</version>
 
     <properties>
         <maven.compiler.source>21</maven.compiler.source>
@@ -18,7 +18,7 @@
         <dependency>
             <groupId>com.jcraft</groupId>
             <artifactId>jsch</artifactId>
-            <version>0.1.55</version>   
+            <version>0.1.55</version>
         </dependency>
         <dependency>
             <groupId>org.postgresql</groupId>
@@ -34,7 +34,6 @@
         </dependency>
     </dependencies>
 
-
     <build>
         <plugins>
             <plugin>
@@ -42,8 +41,10 @@
                 <artifactId>maven-assembly-plugin</artifactId>
                 <version>3.6.0</version>
                 <executions>
+
+                    <!-- Сборка fat jar для клиента -->
                     <execution>
-                        <id>client</id>
+                        <id>client-fat</id>
                         <phase>package</phase>
                         <goals>
                             <goal>single</goal>
@@ -57,8 +58,34 @@
                                     <mainClass>client.Main</mainClass>
                                 </manifest>
                             </archive>
+                            <finalName>JL7-client</finalName>
+                            <appendAssemblyId>false</appendAssemblyId>
+                            <!--                            <classifier>client-fat</classifier>-->
                         </configuration>
                     </execution>
+
+                    <!-- Сборка fat jar для сервера -->
+                    <execution>
+                        <id>server-fat</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>single</goal>
+                        </goals>
+                        <configuration>
+                            <descriptorRefs>
+                                <descriptorRef>jar-with-dependencies</descriptorRef>
+                            </descriptorRefs>
+                            <archive>
+                                <manifest>
+                                    <mainClass>server.Main</mainClass>
+                                </manifest>
+                            </archive>
+                            <finalName>JL7-server</finalName>
+                            <appendAssemblyId>false</appendAssemblyId>
+                            <!--                            <classifier>server-fat</classifier>-->
+                        </configuration>
+                    </execution>
+
                 </executions>
             </plugin>
         </plugins>

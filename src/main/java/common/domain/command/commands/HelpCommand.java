@@ -20,7 +20,7 @@ public class HelpCommand extends Command {
                 execute_script {file_path}: выполнить скрипт
                 exit: завершить работу клиента
                 history: вывести последние 5 команд
-                replace_if_greater {key}: заменить элемент по ключу, если новый больше старого
+                replace_if_greater {key}: заменить элемент по ключу, если новый имеет большую скорость столкновения
                 remove_greater_key {key}: удалить все элементы, ключ которых превышает данный
                 sum_of_impact_speed: вывести сумму значений поля impactSpeed для всех элементов коллекции
                 min_by_soundtrack_name: вывести любой элемент коллекции с минимальным полем soundtrackName

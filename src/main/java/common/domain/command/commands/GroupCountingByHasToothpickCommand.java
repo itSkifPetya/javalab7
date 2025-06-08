@@ -10,7 +10,7 @@ import java.util.List;
 public class GroupCountingByHasToothpickCommand extends Command {
     @Override
     public Response execute(Hashtable<Integer, HumanBeing> collection, String[] args) {
-        String message = "";
+        StringBuilder message = new StringBuilder();
         List<HumanBeing> col1, col2;
         col1 = collection.values()
                 .stream()
@@ -20,15 +20,15 @@ public class GroupCountingByHasToothpickCommand extends Command {
                 .stream()
                 .filter(s -> !s.getHasToothpick())
                 .toList();
-        message += "Имеют зубочистку:\n";
+        message.append("\u001B[32mИмеют зубочистку:\u001B[0m\n");
         for (HumanBeing hb : col1) {
-            message += hb.toPrettyString() + "\n";
+            message.append(hb.toPrettyString()).append("\n");
         }
-        message += "Не имеют зубочистку:\n";
+        message.append("\u001B[31mНе имеют зубочистку:\u001B[0m\n");
         for (HumanBeing hb : col2) {
-            message += hb.toPrettyString() + "\n";
+            message.append(hb.toPrettyString()).append("\n");
         }
-        return new Response(true, message, collection);
+        return new Response(true, message.toString(), collection);
     }
 
 }

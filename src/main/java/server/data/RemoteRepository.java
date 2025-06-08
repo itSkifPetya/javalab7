@@ -18,9 +18,17 @@ import server.domain.DAO.HumanBeingDAO;
 public class RemoteRepository implements HumanBeingDAO {
     // This class is a placeholder for remote repository implementation.
     // It should contain methods to interact with a remote database or service.
-    private static final String URL = "jdbc:postgresql://localhost:5432/studs";
-    private static final String USER = "s465877";
-    private static final String PASSWORD = "D7cCg1cMguDJeuwv";
+    private static String URL = "jdbc:postgresql://localhost:5432/studs";
+    private static String USER = "s465877";
+    private static String PASSWORD = "D7cCg1cMguDJeuwv";
+
+    public RemoteRepository() {}
+
+    public RemoteRepository(String url, String user, String password) {
+        URL = url;
+        USER = user;
+        PASSWORD = password;
+    }
     
     @Override
     public void writeData(Hashtable<Integer, HumanBeing> collection) {

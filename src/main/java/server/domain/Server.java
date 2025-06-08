@@ -1,38 +1,36 @@
 package server.domain;
 
+import com.jcraft.jsch.JSchException;
 import common.data.models.HumanBeingModel.HumanBeing;
 import common.data.models.Request;
 import common.data.models.Response;
-import common.domain.command.HistoryKeeper;
-import common.domain.command.Invoker;
-import common.domain.command.Serializer;
+import common.domain.command.*;
 import server.data.UserRepository;
 import server.data.RemoteRepository;
 
 import java.io.IOException;
-import java.net.BindException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
-import java.nio.channels.SelectionKey;
-import java.nio.channels.Selector;
-import java.nio.channels.ServerSocketChannel;
-import java.nio.channels.SocketChannel;
+import java.nio.channels.*;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.locks.ReentrantLock;
 
 public class Server {
     private static Server instance;
-    private final Map<SocketChannel, ClientContext> clients = new HashMap<>();
     private static Hashtable<Integer, HumanBeing> globalCollection = new Hashtable<>();
-    private static String fileName = "";
-    private static boolean hasFileName = false;
+    private static Hashtable<Integer, HumanBeing> tempCollection = new Hashtable<>();
+    public static RemoteRepository remoteRepository;
+    public static UserRepository userRepository = new UserRepository();
     private final ExecutorService readPool = Executors.newCachedThreadPool();
-    private final ExecutorService processPool = Executors.newFixedThreadPool(8); // число потоков можно настроить
+    private final ExecutorService processPool = Executors.newFixedThreadPool(8);
     private final ForkJoinPool sendPool = new ForkJoinPool();
     private static final ReentrantLock collectionLock = new ReentrantLock();
+    public static Scanner SCANNER = new Scanner(System.in);
+    private static Invoker invoker = Invoker.getInstance();
 
     private Server() {
+        invoker.invokerInit();
     }
 
     public static Server getInstance() {
@@ -43,195 +41,193 @@ public class Server {
     }
 
     public void start() {
-        Serializer serializer = Serializer.getInstance();
-        Scanner sc = new Scanner(System.in);
-        HistoryKeeper historyKeeper = HistoryKeeper.getInstance();
-        Invoker invoker = Invoker.getInstance();
-        invoker.invokerInit();
-
-
+        System.out.println("Запуск сервера...");
+        int opt;
+        while (true) {
+            try {
+                System.out.println("Выберите режим работы:\n1) Сервер запущен локально\n2) Сервер запущен на гелиосе");
+                System.out.print("Номер: ");
+                opt = Integer.parseInt(SCANNER.nextLine());
+                break;
+            } catch (NumberFormatException e) {
+                System.out.println("Некорректный ввод. Попробуйте ещё раз");
+            }
+        }
+        switch (opt) {
+            case 1 -> {
+                System.out.println("Сервер запущен локально + SSH Tunnel");
+                SSHTunnel tunnel = new SSHTunnel();
+                try {
+                    tunnel.psqlSSHTunnel();
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
+                remoteRepository = new RemoteRepository();
+            }
+            case 2 -> {
+                System.out.println("Сервер запущен на гелиосе");
+                remoteRepository = new RemoteRepository("jdbc:postgresql://pg:5432/studs", "s465877", "D7cCg1cMguDJeuwv");
+            }
+            default -> {
+                System.out.println("Некорректный ввод. Попробуйте ещё раз");
+            }
+        }
+        globalCollection = remoteRepository.readData();
         int PORT = 0;
         while (true) {
             try {
                 System.out.print("Введите порт: ");
-                PORT = sc.nextInt();
-            } catch (InputMismatchException e) {
-                System.out.println(e);
-                sc.nextLine();
+                PORT = Integer.parseInt(SCANNER.nextLine());
+                break;
+            } catch (NumberFormatException e) {
+                System.out.println("Некорректный ввод. Попробуйте ещё раз");
             }
-
-            try (ServerSocketChannel ssc = ServerSocketChannel.open();) {
-                ssc.configureBlocking(false);
-                ssc.socket().bind(new InetSocketAddress(PORT));
-                System.out.println("Сервер запущен на порту " + PORT);
-
-                // Загружаем коллекцию из БД при старте
-                RemoteRepository repo = new RemoteRepository();
-                globalCollection = repo.readData();
-                System.out.println("Коллекция загружена из БД. Готов к работе с командами...");
-
-                Selector selector = Selector.open();
-                ssc.register(selector, SelectionKey.OP_ACCEPT);
-
-                while (true) {
-                    int readyChannels = selector.select();
-                    if (readyChannels == 0) continue;
-
-                    Set<SelectionKey> selectedKeys = selector.selectedKeys();
-                    Iterator<SelectionKey> keyIterator = selectedKeys.iterator();
-
-                    while (keyIterator.hasNext()) {
-                        SelectionKey key = keyIterator.next();
-                        keyIterator.remove();
-
-                        if (key.isAcceptable()) {
-                            acceptClient(key, selector);
-                        } else if (key.isReadable()) {
-                            readPool.submit(() -> {
-                                try {
-                                    readClientData(key, serializer, invoker, historyKeeper);
-                                } catch (IOException e) {
-                                    e.printStackTrace();
-                                }
-                            });
+        }
+        try (ServerSocketChannel serverSocketChannel = ServerSocketChannel.open()) {
+            serverSocketChannel.bind(new InetSocketAddress(PORT));
+            serverSocketChannel.configureBlocking(false);
+            Selector selector = Selector.open();
+            serverSocketChannel.register(selector, SelectionKey.OP_ACCEPT);
+            System.out.println("Сервер запущен на порту " + PORT);
+            while (true) {
+                selector.select();
+                Set<SelectionKey> selectedKeys = selector.selectedKeys();
+                Iterator<SelectionKey> iter = selectedKeys.iterator();
+                while (iter.hasNext()) {
+                    SelectionKey key = iter.next();
+                    iter.remove();
+                    if (key.isAcceptable()) {
+                        try {
+                            SocketChannel client = serverSocketChannel.accept();
+                            client.configureBlocking(false);
+                            client.register(selector, SelectionKey.OP_READ);
+                            System.out.println("Подключен клиент: " + client.getRemoteAddress());
+                        } catch (CancelledKeyException e) {
+                            System.out.println("Клиент разорвал соединение");
                         }
+                    } else if (key.isReadable()) {
+                        SocketChannel client = (SocketChannel) key.channel();
+                        readPool.submit(() -> handleRead(client));
                     }
                 }
-            } catch (BindException e) {
-                System.out.println("Ошибка: " + e);
-            } catch (IOException e) {
-                System.err.println("Ошибка сервера: " + e.getMessage());
             }
+        } catch (IOException e) {
+            System.err.println("Ошибка запуска сервера: " + e.getMessage());
         }
     }
 
-    private void acceptClient(SelectionKey key, Selector selector) throws IOException {
-        ServerSocketChannel ssc = (ServerSocketChannel) key.channel();
-        SocketChannel clientSocketChannel = ssc.accept();
-        if (clientSocketChannel == null) return;
-
-        clientSocketChannel.configureBlocking(false);
-        clientSocketChannel.register(selector, SelectionKey.OP_READ);
-
-        // Инициализируем контекст клиента
-        ClientContext context = new ClientContext();
-        context.collection = globalCollection; // Теперь у каждого клиента есть ссылка на коллекцию
-        clients.put(clientSocketChannel, context);
-        System.out.println("Клиент " + clientSocketChannel.getRemoteAddress() + " подключен");
-    }
-
-    private void readClientData(SelectionKey key, Serializer serializer, Invoker invoker, HistoryKeeper historyKeeper) throws IOException {
-        SocketChannel clientSocketChannel = (SocketChannel) key.channel();
-        ClientContext context = clients.get(clientSocketChannel);
-
-        if (context == null) {
-            clientSocketChannel.close();
-            return;
-        }
-
-        processPool.submit(() -> {
-            try {
-                processCommands(clientSocketChannel, context, serializer, invoker, historyKeeper);
-            } catch (Exception e) {
-                e.printStackTrace();
+    private void handleRead(SocketChannel client) {
+        ByteBuffer buffer = ByteBuffer.allocate(1024);
+        try {
+            int bytesRead = client.read(buffer);
+            if (bytesRead == -1) {
+                client.close();
+                return;
             }
-        });
-    }
-
-    private void processCommands(SocketChannel clientSocketChannel, ClientContext context, Serializer serializer, Invoker invoker, HistoryKeeper historyKeeper) throws IOException, ClassNotFoundException, InterruptedException {
-        ByteBuffer buffer = ByteBuffer.allocate(8192);
-        int bytesRead = clientSocketChannel.read(buffer);
-        if (bytesRead > 0) {
-            if (!buffer.hasRemaining()) {
-                System.out.println("Получены нулевые данные.");
+            if (bytesRead == 0) {
                 return;
             }
             buffer.flip();
-
             byte[] data = new byte[buffer.remaining()];
             buffer.get(data);
-
-            try {
-                Request request = (Request) serializer.deserialize(data);
-                System.out.println("Получена команда: " + request.getCommand().getClass().getName());
-
-                // Аутентификация пользователя
-                String username = request.getUsername();
-                String password = request.getPassword();
-                System.out.printf("Пользователь: %s, Пароль: %s%n", username, password);
-                UserRepository userRepo = new UserRepository();
-                boolean authenticated = userRepo.authenticate(username, password);
-                if (!authenticated) {
-                    Response response = new Response(false, "Ошибка авторизации. Проверьте логин и пароль.", context.collection);
-                    byte[] responseBytes = serializer.serialize(response);
-                    clientSocketChannel.write(ByteBuffer.wrap(responseBytes));
-                    return;
-                }
-                Integer userId = userRepo.getUserId(username);
-
-                // Прокидываем userId в команды, если они поддерживают это
-                collectionLock.lock();
-                try {
-                    if (request.getCommand() instanceof common.domain.command.DataCollector) {
-                        String[] args = request.getArgs();
-                        // Последний аргумент всегда userId (null на клиенте)
-                        String[] newArgs = java.util.Arrays.copyOf(args, args.length + 1);
-                        newArgs[newArgs.length - 1] = userId != null ? userId.toString() : null;
-                        Response response = request.getCommand().execute(context.collection, newArgs);
-                        String cmdName = invoker.getCommandName(request.getCommand());
-                        historyKeeper.add(cmdName);
-                        // --- Синхронизация с БД для команд, изменяющих коллекцию ---
-                        String[] modifyingCommands = {"insert", "update", "remove_key", "remove_greater_key", "clear", "replace_if_greater"};
-                        for (String modCmd : modifyingCommands) {
-                            if (cmdName != null && cmdName.equalsIgnoreCase(modCmd) && response.isSuccess()) {
-                                RemoteRepository repo = new RemoteRepository();
-                                repo.writeData(context.collection);
-                                break;
-                            }
-                        }
-                        // --- конец блока синхронизации ---
-                        sendPool.submit(() -> {
-                            try {
-                                byte[] responseBytes = serializer.serialize(response);
-                                clientSocketChannel.write(ByteBuffer.wrap(responseBytes));
-                            } catch (IOException e) {
-                                e.printStackTrace();
-                            }
-                        });
-                    } else {
-                        Response response = request.getCommand().execute(context.collection, request.getArgs());
-                        String cmdName = invoker.getCommandName(request.getCommand());
-                        historyKeeper.add(cmdName);
-                        sendPool.submit(() -> {
-                            try {
-                                byte[] responseBytes = serializer.serialize(response);
-                                clientSocketChannel.write(ByteBuffer.wrap(responseBytes));
-                            } catch (IOException e) {
-                                e.printStackTrace();
-                            }
-                        });
-                    }
-                } finally {
-                    collectionLock.unlock();
-                }
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            } catch (ClassNotFoundException e) {
-                throw new RuntimeException(e);
-            }
+            processPool.submit(() -> handleRequest(client, data));
+        } catch (IOException e) {
+            try { client.close(); } catch (IOException ignored) {}
         }
     }
 
-    // Контекст клиента для хранения состояния
-    private static class ClientContext {
-        ClientState state = ClientState.WAITING_FILE_NAME;
-        String fileName;
-        Hashtable<Integer, HumanBeing> collection;
+    private void handleRequest(SocketChannel client, byte[] data) {
+        try {
+            Request request = (Request) Serializer.getInstance().deserialize(data);
+            Response response = processRequest(request);
+            sendPool.submit(() -> sendResponse(client, response));
+        } catch (Exception e) {
+            e.printStackTrace(); // Логируем ошибку в консоль
+            sendPool.submit(() -> {
+                try {
+                    Response error = new Response(false, "Ошибка обработки запроса: " + e, new Hashtable<>());
+                    sendResponse(client, error);
+                } catch (Exception ignored) {}
+            });
+        }
+    }
 
-        enum ClientState {
-            WAITING_FILE_NAME,
-            LOADING_COLLECTION,
-            PROCESSING_COMMANDS
+
+    private Response processRequest(Request request) {
+        String commandName = invoker.getCommandName(request.getCommand());
+        if (commandName == null) {
+            return new Response(false, "Неизвестная команда", new Hashtable<>());
+        }
+        // Регистрация
+        if ("register".equals(commandName)) {
+            if (request.getArgs().length < 2) {
+                return new Response(false, "Необходимо указать логин и пароль", new Hashtable<>());
+            }
+            boolean success = userRepository.register(request.getArgs()[0], request.getArgs()[1]);
+            if (success) {
+                return new Response(true, "Регистрация успешна", new Hashtable<>());
+            } else {
+                return new Response(false, "Пользователь с таким именем уже существует", new Hashtable<>());
+            }
+        }
+        // Авторизация
+        if (!userRepository.authenticate(request.getUsername(), request.getPassword())) {
+            return new Response(false, "Пользователь не авторизован", new Hashtable<>());
+        }
+        // Выполнение команды
+        Command command = invoker.getCommandMap().get(commandName);
+        if (command == null) {
+            return new Response(false, "Команда не найдена", new Hashtable<>());
+        }
+
+        boolean isModifying = invoker.modifyingCommands.contains(commandName);
+        // Получаем userId по username
+        Integer userId = userRepository.getUserId(request.getUsername());
+        String[] argsWithUserId;
+        if (userId != null) {
+            // Добавляем userId в конец args
+            String[] origArgs = request.getArgs();
+            argsWithUserId = new String[origArgs.length + 1];
+            System.arraycopy(origArgs, 0, argsWithUserId, 0, origArgs.length);
+            argsWithUserId[origArgs.length] = userId.toString();
+        } else {
+            argsWithUserId = request.getArgs();
+        }
+        // Добавляем команду в историю пользователя
+        HistoryKeeper.getInstance().add(commandName, userId);
+        if (isModifying) {
+            collectionLock.lock();
+            try {
+                tempCollection = new Hashtable<>(globalCollection);
+                Response resp = command.execute(tempCollection, argsWithUserId);
+                if (resp.isSuccess()) {
+                    try {
+                        remoteRepository.writeData(tempCollection);
+                        globalCollection = tempCollection;
+                        return new Response(true, resp.getMessage(), globalCollection);
+                    } catch (Exception e) {
+                        return new Response(false, "Ошибка при сохранении в БД: " + e.getMessage(), globalCollection);
+                    }
+                } else {
+                    return resp;
+                }
+            } finally {
+                collectionLock.unlock();
+            }
+        } else {
+            return command.execute(globalCollection, argsWithUserId);
+        }
+    }
+
+    private void sendResponse(SocketChannel client, Response response) {
+        try {
+            byte[] data = Serializer.getInstance().serialize(response);
+            ByteBuffer buffer = ByteBuffer.wrap(data);
+            while (buffer.hasRemaining()) {
+                client.write(buffer);
+            }
+        } catch (IOException e) {
+            try { client.close(); } catch (IOException ignored) {}
         }
     }
 }

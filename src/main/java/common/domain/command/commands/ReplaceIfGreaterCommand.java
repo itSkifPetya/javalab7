@@ -14,7 +14,7 @@ import java.util.Hashtable;
 public class ReplaceIfGreaterCommand extends Command implements DataCollector {
     @Override
     public Response execute(Hashtable<Integer, HumanBeing> collection, String[] args) {
-        String message = "";
+        StringBuilder message = new StringBuilder();
         Integer key = Integer.parseInt(args[0]);
         boolean keyExists = collection.keySet().stream().anyMatch(i -> i.equals(key));
 
@@ -48,13 +48,12 @@ public class ReplaceIfGreaterCommand extends Command implements DataCollector {
 
         HumanBeing newHumanBeing = HumanBeing.insertHumanBeing(key, name, coordinates, LocalDate.now(), realHero, hasToothpick, impactSpeed, soundtrackName, minutesOfWaiting, weaponType, car, userId);
         if (oldHumanBeing.getImpactSpeed() < newHumanBeing.getImpactSpeed()) {
-            message = "Объект успешно заменён";
             collection.replace(key, newHumanBeing);
+            message.append("Объект успешно заменён\n");
         } else {
-            message += "Новый элемент меньше старого. Коллекция не изменена.";
+            message.append("Новый объект не больше старого. Замена не произведена.\n");
         }
-
-        return new Response(true, message, collection);
+        return new Response(true, message.toString(), collection);
     }
 
     @Override

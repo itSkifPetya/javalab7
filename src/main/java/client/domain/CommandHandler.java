@@ -7,8 +7,10 @@ import common.domain.command.DataCollector;
 import common.domain.command.Invoker;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Scanner;
+import java.util.stream.Collectors;
 
 public class CommandHandler {
     private static CommandHandler instance;
@@ -29,6 +31,7 @@ public class CommandHandler {
         if (command instanceof DataCollector) {
             newArgs = dataCollectorArgsBuilder((DataCollector) command, args);
         }
+
         return new Request(command, newArgs, username, password);
     }
 
@@ -46,7 +49,7 @@ public class CommandHandler {
         } catch (Exception e) {
             System.out.println("Такой команды нет. Для подробной информации используйте help");
         }
-        System.out.println(commandName);
+//        System.out.println(commandName);
         if (command != null && args.length != command.getArgsCount()) {
             System.out.println("Некорректное количество аргументов");
             return null;
@@ -159,7 +162,7 @@ public class CommandHandler {
 
         while (true) {
             try {
-                System.out.print("Введите врем�� ожидания (long): ");
+                System.out.print("Введите время ожидания (long): ");
                 inp = sc.nextLine();
                 if (inp == null || inp.trim().isEmpty()) {
                     minutesOfWaiting = 0;
@@ -186,59 +189,6 @@ public class CommandHandler {
 
         cool = readBoolean(sc, "Крутая машина (boolean)? (true/false): ");
         argsList.add(String.valueOf(cool));
-
-//        while (true) {
-//            try {
-//                // Ввод имени
-//                System.out.print("Введите имя пострадавшего: ");
-//                name = sc.nextLine();
-//                if (name == null || name.trim().isEmpty()) {
-//                    throw new IllegalArgumentException("Имя не может быть пустым.");
-//                }
-//                argsList.add(name);
-//
-//                // Ввод X координаты
-//                while (true) {
-//                    try {
-//                        System.out.print("Введите X координату (int): ");
-//                        coordX = Integer.parseInt(sc.nextLine()); // Изменено на nextLine()
-//                        break;
-//                    } catch (NumberFormatException e) {
-//                        System.out.println("Ошибка: Введите целое число (int).");
-//                    }
-//                }
-//                argsList.add(String.valueOf(coordX));
-//
-//                // Ввод Y координаты
-//                while (true) {
-//                    try {
-//                        System.out.print("Введите Y координату (double): ");
-//                        coordY = Double.parseDouble(sc.nextLine()); // Изменено на nextLine()
-//                        break;
-//                    } catch (NumberFormatException e) {
-//                        System.out.println("Ошибка: Введите число с плавающей точкой (double).");
-//                    }
-//                }
-//                argsList.add(String.valueOf(coordY));
-//
-//                // ... остальной код ввода ...
-//
-//                // Ввод soundtrackName (исправлено место)
-//                System.out.print("Введите название трека: ");
-//                soundtrackName = sc.nextLine();
-//                if (soundtrackName == null || soundtrackName.trim().isEmpty()) {
-//                    throw new IllegalArgumentException("Название трека не может быть пустым.");
-//                }
-//                argsList.add(soundtrackName);
-//
-//                // ... остальной код ...
-//
-//                break; // Выход из основного цикла только после успешного ввода всех данных
-//
-//            } catch (NullPointerException | IllegalArgumentException e) {
-//                System.out.println("Ошибка: " + e.getMessage());
-//            }
-//        }
         return argsList.toArray(String[]::new);
     }
 
@@ -255,3 +205,4 @@ public class CommandHandler {
 
 
 }
+

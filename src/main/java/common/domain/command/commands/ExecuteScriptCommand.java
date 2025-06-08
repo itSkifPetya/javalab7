@@ -17,7 +17,9 @@ public class ExecuteScriptCommand extends Command {
         Map<String, Command> commandMap = invoker.getCommandMap();
         StringBuilder message = new StringBuilder();
         Response response = null;
-//        String[] tempArgs = new String[]{};
+
+        // userId теперь передаётся последним аргументом
+        String userId = args.length > 1 ? args[args.length - 1] : null;
 
         try (Scanner sc = new Scanner(new FileReader(path))) {
             String inp;
@@ -35,19 +37,20 @@ public class ExecuteScriptCommand extends Command {
                     message.append("Неизвестная команда: %s\n".formatted(inpArray.getFirst()));
                     continue;
                 }
-                if (command.getArgsCount() != inpArray.size()-1) {
+                // args для команды: все аргументы из строки + userId
+                String[] commandArgs = new String[inpArray.size()];
+                for (int i = 1; i < inpArray.size(); i++) {
+                    commandArgs[i - 1] = inpArray.get(i);
+                }
+                commandArgs[inpArray.size() - 1] = userId;
+                if (command.getArgsCount() != inpArray.size() - 1) {
                     message.append("Команда %s не имеет аргументов или их количество некорректно\n".formatted(inpArray.getFirst()));
                     continue;
                 }
                 System.out.println(inpArray);
 
-                response = command.execute(collection, new String[]{inpArray.getLast()});
-                message.append("\n\t" + inp + ":\n\n");
-                if (command instanceof ShowCommand) {
-                    for (HumanBeing hb : collection.values()) {
-                        message.append(hb.toPrettyString());
-                    }
-                }
+                response = command.execute(collection, commandArgs);
+                message.append("\n\t").append(inp).append(":\n\n");
                 message.append(response.getMessage());
 
 //                Thread.sleep(100);

@@ -1,5 +1,6 @@
-package client.domain;
+package common.domain.command;
 
+import client.domain.Client;
 import com.jcraft.jsch.JSch;
 import com.jcraft.jsch.JSchException;
 import com.jcraft.jsch.Session;
@@ -50,5 +51,24 @@ public class SSHTunnel {
         if (session != null && session.isConnected()) {
             session.disconnect();
         }
+    }
+
+    public void psqlSSHTunnel() throws Exception {
+        String SSH_USER = "s465877";
+        String SSH_HOST = "helios.cs.ifmo.ru";
+        String sshPassword = "zAwm#7410";
+        int SSH_PORT = 2222;
+        String REMOTE_HOST = "pg";
+        int REMOTE_PORT = 5432;
+        int LOCAL_PORT = 5432;
+
+        JSch jSch = new JSch();
+        session = jSch.getSession(SSH_USER, SSH_HOST, SSH_PORT);
+        session.setPassword(sshPassword);
+
+        session.setConfig("StrictHostKeyChecking", "no");
+        session.connect();
+        session.setPortForwardingL(LOCAL_PORT, REMOTE_HOST, REMOTE_PORT);
+        System.out.println("SSH-туннель создан: localhost:" + LOCAL_PORT + " -> " + REMOTE_HOST + ":" + REMOTE_PORT + " через " + SSH_HOST);
     }
 }

@@ -4,6 +4,7 @@ import common.domain.command.commands.*;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Класс Invoker, в котором инициализируется коллекция доступных команд
@@ -11,6 +12,10 @@ import java.util.Map;
 public class Invoker {
     private static Invoker instance;
     private HashMap<String, Command> commandMap = new HashMap<>();
+    public Set<String> modifyingCommands = Set.of(
+            "insert", "update", "remove_key", "clear", "replace_if_greater",
+            "remove_greater_key", "register"
+    );
 
     private Invoker() {
     }
