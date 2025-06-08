@@ -2,6 +2,7 @@ package server.data;
 
 import server.domain.DAO.UserDAO;
 
+import java.math.BigInteger;
 import java.security.MessageDigest;
 import java.sql.*;
 
@@ -12,11 +13,12 @@ public class UserRepository implements UserDAO {
 
     private String sha1(String input) {
         try {
+            // создаём дайджест с алгоритмом SHA-1
             MessageDigest md = MessageDigest.getInstance("SHA-1");
             byte[] bytes = md.digest(input.getBytes());
-            StringBuilder sb = new StringBuilder();
-            for (byte b : bytes) sb.append(String.format("%02x", b));
-            return sb.toString();
+            // перевод дайджеста в строковое представление в шестнадцатеричной сс
+            String sb = new BigInteger(1, bytes).toString(16);
+            return sb;
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
@@ -32,8 +34,7 @@ public class UserRepository implements UserDAO {
             ps.executeUpdate();
             return true;
         } catch (SQLException e) {
-            // username уже существует или другая ошибка SQL
-            e.printStackTrace(); // Логируем ошибку для диагностики
+            e.printStackTrace();
             return false;
         }
     }
@@ -46,6 +47,7 @@ public class UserRepository implements UserDAO {
             ps.setString(1, username);
             ResultSet rs = ps.executeQuery();
             if (rs.next()) {
+                // сверка хэшей пароля из бд и с клиента
                 String hash = rs.getString("password_hash");
                 return hash.equals(sha1(password));
             }

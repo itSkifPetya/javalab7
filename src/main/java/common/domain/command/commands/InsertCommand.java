@@ -30,7 +30,6 @@ public class InsertCommand extends Command implements DataCollector {
         WeaponType weaponType = WeaponType.valueOf(args[9]);
         Car car = new Car(Boolean.parseBoolean(args[10]));
 
-        // userId теперь передаётся последним аргументом с сервера
         Integer userId = null;
         if (args.length > 11) {
             try {

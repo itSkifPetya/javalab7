@@ -54,6 +54,7 @@ public class Invoker {
         commandMap.put("min_by_soundtrack_name", new MinBySoundtrackNameCommand());
         commandMap.put("group_counting_by_has_toothpick", new GroupCountingByHasToothpickCommand());
         commandMap.put("register", new RegisterCommand());
+        commandMap.put("login", new LogInCommand());
     }
 
     /**

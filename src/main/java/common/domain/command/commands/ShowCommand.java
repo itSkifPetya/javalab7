@@ -10,7 +10,6 @@ public class ShowCommand extends Command {
     @Override
     public Response execute(Hashtable<Integer, HumanBeing> collection, String[] args) {
         StringBuilder sb = new StringBuilder();
-        // userId теперь передаётся последним аргументом
         Integer userId = null;
         if (args.length > 0) {
             try {

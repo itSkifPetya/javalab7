@@ -33,7 +33,6 @@ public class ReplaceIfGreaterCommand extends Command implements DataCollector {
         Car car = new Car(Boolean.parseBoolean(args[10]));
 
         HumanBeing oldHumanBeing = collection.get(key);
-        // userId теперь передаётся последним аргументом с сервера
         Integer userId = null;
         if (args.length > 11) {
             try {
@@ -41,7 +40,6 @@ public class ReplaceIfGreaterCommand extends Command implements DataCollector {
             } catch (Exception ignored) {}
         }
 
-        // Проверка прав: только владелец может заменить объект
         if (oldHumanBeing != null && oldHumanBeing.getUserId() != null && !oldHumanBeing.getUserId().equals(userId)) {
             return new Response(false, "Вы не являетесь владельцем этого объекта. Замена запрещена.", collection);
         }

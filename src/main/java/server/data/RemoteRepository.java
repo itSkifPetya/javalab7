@@ -16,29 +16,29 @@ import common.data.models.HumanBeingModel.WeaponType;
 import server.domain.DAO.HumanBeingDAO;
 
 public class RemoteRepository implements HumanBeingDAO {
-    // This class is a placeholder for remote repository implementation.
-    // It should contain methods to interact with a remote database or service.
     private static String URL = "jdbc:postgresql://localhost:5432/studs";
     private static String USER = "s465877";
     private static String PASSWORD = "D7cCg1cMguDJeuwv";
 
-    public RemoteRepository() {}
+    public RemoteRepository() throws SQLException {
+        DriverManager.getConnection(URL, USER, PASSWORD);
+    }
 
-    public RemoteRepository(String url, String user, String password) {
+    public RemoteRepository(String url, String user, String password) throws SQLException {
         URL = url;
         USER = user;
         PASSWORD = password;
+        DriverManager.getConnection(URL, USER, PASSWORD);
     }
-    
+
     @Override
     public void writeData(Hashtable<Integer, HumanBeing> collection) {
-        String deleteSql = "DELETE FROM human_beings";
+        // референс для prepared statement
         String insertSql = "INSERT INTO human_beings (id, name, coord_x, coord_y, creation_date, real_hero, has_toothpick, impact_speed, soundtrack_name, minutes_of_waiting, weapon_type, car_cool, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-        try (Connection conn = DriverManager.getConnection(URL, USER, PASSWORD)) {
+
+        try (Connection conn = DriverManager.getConnection(URL, USER, PASSWORD);) {
+            // ручное управление транзакциями
             conn.setAutoCommit(false);
-            try (Statement delStmt = conn.createStatement()) {
-                delStmt.executeUpdate(deleteSql);
-            }
             try (PreparedStatement ps = conn.prepareStatement(insertSql)) {
                 for (HumanBeing hb : collection.values()) {
                     ps.setInt(1, hb.getId());
@@ -53,16 +53,24 @@ public class RemoteRepository implements HumanBeingDAO {
                     ps.setLong(10, hb.getMinutesOfWaiting());
                     ps.setString(11, hb.getWeaponType().name());
                     ps.setBoolean(12, hb.getCar().getCool());
-                    ps.setInt(13, hb.getUserId()); // если есть поле userId
+                    ps.setInt(13, hb.getUserId());
+
+                    // добавление данных выше в пакет запросов
                     ps.addBatch();
                 }
+                // отправка пакета запросов
                 ps.executeBatch();
+                // коммит в бд
+                conn.commit();
+            } catch (SQLException e) {
+                // откат бд в случае ошибки
+                conn.rollback();
+                e.printStackTrace();
             }
-            conn.commit();
         } catch (SQLException e) {
             e.printStackTrace();
         }
-}
+    }
 
 
     @Override
@@ -70,8 +78,8 @@ public class RemoteRepository implements HumanBeingDAO {
         Hashtable<Integer, HumanBeing> collection = new Hashtable<>();
         String sql = "SELECT * FROM human_beings";
         try (Connection conn = DriverManager.getConnection(URL, USER, PASSWORD);
-            Statement stmt = conn.createStatement();
-            ResultSet rs = stmt.executeQuery(sql)) {
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
             while (rs.next()) {
                 int id = rs.getInt("id");
                 String name = rs.getString("name");
@@ -88,18 +96,18 @@ public class RemoteRepository implements HumanBeingDAO {
                 int userId = rs.getInt("user_id");
 
                 HumanBeing hb = HumanBeing.insertHumanBeing(
-                    id,
-                    name,
-                    new Coordinates(coordX, coordY),
-                    creationDate,
-                    realHero,
-                    hasToothpick,
-                    impactSpeed,
-                    soundtrackName,
-                    minutesOfWaiting,
-                    WeaponType.valueOf(weaponType),
-                    new Car(carCool),
-                    userId
+                        id,
+                        name,
+                        new Coordinates(coordX, coordY),
+                        creationDate,
+                        realHero,
+                        hasToothpick,
+                        impactSpeed,
+                        soundtrackName,
+                        minutesOfWaiting,
+                        WeaponType.valueOf(weaponType),
+                        new Car(carCool),
+                        userId
                 );
                 collection.put(id, hb);
             }
@@ -108,5 +116,5 @@ public class RemoteRepository implements HumanBeingDAO {
         }
         return collection;
     }
-    
+
 }

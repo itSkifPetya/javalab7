@@ -55,16 +55,17 @@ public class Client {
                 SCANNER.nextLine();
             }
             case 2 -> {
-                tunnel = new SSHTunnel();
+                tunnel = new SSHTunnel(SCANNER);
                 try {
-                    tunnel.start();
+                    tunnel.baseTunnel();
                 } catch (JSchException e) {
                     throw new RuntimeException(e);
                 }
+                // получаем порт, который будем использовать для подключения к серверу через туннель
                 PORT = tunnel.getLocalPort();
             }
         }
-
+        // порт зависит от opt
         try (Socket socket = new Socket("localhost", PORT)) {
             InputStream is = socket.getInputStream();
             OutputStream os = socket.getOutputStream();
@@ -72,37 +73,41 @@ public class Client {
             while (!authenticated) {
                 System.out.println("1) Войти\n2) Зарегистрироваться");
                 System.out.print("Выберите действие: ");
-                String choice = SCANNER.nextLine();
-                if ("1".equals(choice)) {
-                    System.out.print("Логин: ");
-                    username = SCANNER.nextLine();
-                    System.out.print("Пароль: ");
-                    password = SCANNER.nextLine();
-                    Request testRequest = handler.collectRequest("info", new String[]{}, username, password);
-                    serializer.serialize(testRequest, os);
-                    Response testResponse = (Response) serializer.deserialize(is);
-                    if (testResponse.isSuccess()) {
-                        System.out.println("Авторизация успешна!");
-                        authenticated = true;
-                    } else {
-                        System.out.println("Ошибка авторизации: " + testResponse.getMessage());
+
+                int choice = SCANNER.nextInt();
+                switch (choice) {
+                    case 1 -> {
+                        System.out.print("Логин: ");
+                        username = SCANNER.nextLine();
+                        System.out.print("Пароль: ");
+                        password = SCANNER.nextLine();
+                        Request loginRequest = handler.collectRequest("login", new String[]{}, username, password);
+                        Request testRequest = handler.collectRequest("info", new String[]{}, username, password);
+                        serializer.serialize(testRequest, os);
+                        Response testResponse = (Response) serializer.deserialize(is);
+                        if (testResponse.isSuccess()) {
+                            System.out.println("Авторизация успешна!");
+                            authenticated = true;
+                        } else {
+                            System.out.println("Ошибка авторизации: " + testResponse.getMessage());
+                        }
                     }
-                } else if ("2".equals(choice)) {
-                    System.out.print("Придумайте логин: ");
-                    username = SCANNER.nextLine();
-                    System.out.print("Придумайте пароль: ");
-                    password = SCANNER.nextLine();
-                    String[] args = new String[]{ username, password };
-                    Request regRequest = handler.collectRequest("register", args, username, password);
-                    serializer.serialize(regRequest, os);
-                    Response regResponse = (Response) serializer.deserialize(is);
-                    if (regResponse.isSuccess()) {
-                        System.out.println("Регистрация успешна! Теперь войдите.");
-                    } else {
-                        System.out.println("Ошибка регистрации: " + regResponse.getMessage());
+                    case 2 -> {
+                        System.out.print("Придумайте логин: ");
+                        username = SCANNER.nextLine();
+                        System.out.print("Придумайте пароль: ");
+                        password = SCANNER.nextLine();
+                        String[] args = new String[]{ username, password };
+                        Request regRequest = handler.collectRequest("register", args, username, password);
+                        serializer.serialize(regRequest, os);
+                        Response regResponse = (Response) serializer.deserialize(is);
+                        if (regResponse.isSuccess()) {
+                            System.out.println("Регистрация успешна! Теперь войдите.");
+                        } else {
+                            System.out.println("Ошибка регистрации: " + regResponse.getMessage());
+                        }
                     }
-                } else {
-                    System.out.println("Некорректный выбор. Попробуйте ещё раз.");
+                    default -> System.out.println("Некорректный выбор. Попробуйте ещё раз.");
                 }
             }
             // После авторизации — основной цикл команд
@@ -115,10 +120,6 @@ public class Client {
                 }
                 String[] parts = input.split(" ", 2);
                 String commandName = parts[0];
-//                String[] tempArgs = Arrays.stream(parts[1].split(" "))
-//                        .map(s -> s.trim())
-//                        .toList()
-//                        .toArray(new String[0]);
                 String[] args = parts.length > 1 ? Arrays.stream(parts[1].split(" "))
                                 .map(s -> s.trim())
                                 .toList()
@@ -128,9 +129,6 @@ public class Client {
                 serializer.serialize(request, os);
                 Response response = (Response) serializer.deserialize(is);
                 System.out.println(response.getMessage());
-//                if (response.getData() != null && !response.getData().isEmpty()) {
-//                    response.getData().values().forEach(hb -> System.out.println(hb.toPrettyString()));
-//                }
             }
         } catch (Exception e) {
             System.out.println("Ошибка соединения: " + e.getMessage());

@@ -14,7 +14,6 @@ import java.util.Hashtable;
 public class UpdateCommand extends Command implements DataCollector {
     @Override
     public Response execute(Hashtable<Integer, HumanBeing> collection, String[] args) {
-
         Integer id = Integer.parseInt(args[0]);
         boolean keyExists = collection.keySet().stream().anyMatch(i -> i.equals(id));
         if (!keyExists) return new Response(false, "Такого id нет. Используйте insert (подробнее - help).", collection);
@@ -31,7 +30,6 @@ public class UpdateCommand extends Command implements DataCollector {
         WeaponType weaponType = WeaponType.valueOf(args[9]);
         Car car = new Car(Boolean.parseBoolean(args[10]));
 
-        // userId теперь передаётся последним аргументом с сервера
         Integer userId = null;
         if (args.length > 11) {
             try {

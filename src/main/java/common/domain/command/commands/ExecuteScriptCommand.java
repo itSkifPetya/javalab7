@@ -18,7 +18,6 @@ public class ExecuteScriptCommand extends Command {
         StringBuilder message = new StringBuilder();
         Response response = null;
 
-        // userId теперь передаётся последним аргументом
         String userId = args.length > 1 ? args[args.length - 1] : null;
 
         try (Scanner sc = new Scanner(new FileReader(path))) {

@@ -1,17 +1,18 @@
 package server.domain;
 
-import com.jcraft.jsch.JSchException;
 import common.data.models.HumanBeingModel.HumanBeing;
 import common.data.models.Request;
 import common.data.models.Response;
 import common.domain.command.*;
+import common.domain.command.commands.LogInCommand;
+import common.domain.command.commands.RegisterCommand;
 import server.data.UserRepository;
 import server.data.RemoteRepository;
-
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.*;
+import java.sql.SQLException;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.locks.ReentrantLock;
@@ -42,37 +43,48 @@ public class Server {
 
     public void start() {
         System.out.println("Запуск сервера...");
-        int opt;
+        all:
         while (true) {
+            int opt;
             try {
                 System.out.println("Выберите режим работы:\n1) Сервер запущен локально\n2) Сервер запущен на гелиосе");
                 System.out.print("Номер: ");
                 opt = Integer.parseInt(SCANNER.nextLine());
-                break;
             } catch (NumberFormatException e) {
                 System.out.println("Некорректный ввод. Попробуйте ещё раз");
+                continue;
             }
-        }
-        switch (opt) {
-            case 1 -> {
-                System.out.println("Сервер запущен локально + SSH Tunnel");
-                SSHTunnel tunnel = new SSHTunnel();
-                try {
-                    tunnel.psqlSSHTunnel();
-                } catch (Exception e) {
-                    throw new RuntimeException(e);
+            switch (opt) {
+                case 1 -> {
+                    System.out.println("Сервер запущен локально + SSH Tunnel для psql");
+                    SSHTunnel tunnel = new SSHTunnel(SCANNER);
+                    try {
+                        tunnel.psqlTunnel();
+                        remoteRepository = new RemoteRepository();
+                    } catch (SQLException e) {
+                        e.printStackTrace();
+                        continue;
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                        continue;
+                    }
+                    break all;
                 }
-                remoteRepository = new RemoteRepository();
-            }
-            case 2 -> {
-                System.out.println("Сервер запущен на гелиосе");
-                remoteRepository = new RemoteRepository("jdbc:postgresql://pg:5432/studs", "s465877", "D7cCg1cMguDJeuwv");
-            }
-            default -> {
-                System.out.println("Некорректный ввод. Попробуйте ещё раз");
+                case 2 -> {
+                    System.out.println("Сервер запущен на гелиосе");
+                    try {
+                        remoteRepository = new RemoteRepository("jdbc:postgresql://pg:5432/studs", "s465877", "D7cCg1cMguDJeuwv");
+                    } catch (SQLException e) {
+                        e.printStackTrace();
+                        continue;
+                    }
+                    break all;
+                }
+                default -> System.out.println("Некорректный ввод. Попробуйте ещё раз");
             }
         }
         globalCollection = remoteRepository.readData();
+
         int PORT = 0;
         while (true) {
             try {
@@ -86,6 +98,7 @@ public class Server {
         try (ServerSocketChannel serverSocketChannel = ServerSocketChannel.open()) {
             serverSocketChannel.bind(new InetSocketAddress(PORT));
             serverSocketChannel.configureBlocking(false);
+
             Selector selector = Selector.open();
             serverSocketChannel.register(selector, SelectionKey.OP_ACCEPT);
             System.out.println("Сервер запущен на порту " + PORT);
@@ -154,34 +167,42 @@ public class Server {
 
 
     private Response processRequest(Request request) {
-        String commandName = invoker.getCommandName(request.getCommand());
+        Command command = request.getCommand();
+        String commandName = invoker.getCommandName(command);
+        boolean authenticated = false;
+
         if (commandName == null) {
             return new Response(false, "Неизвестная команда", new Hashtable<>());
         }
-        // Регистрация
-        if ("register".equals(commandName)) {
-            if (request.getArgs().length < 2) {
-                return new Response(false, "Необходимо указать логин и пароль", new Hashtable<>());
+        switch (command) {
+            case RegisterCommand ignored -> {
+                if (request.getArgs().length < 2) {
+                    return new Response(false, "Необходимо указать логин и пароль", new Hashtable<>());
+                }
+                boolean success = userRepository.register(request.getArgs()[0], request.getArgs()[1]);
+                if (success) {
+                    return new Response(true, "Регистрация успешна", new Hashtable<>());
+                } else {
+                    return new Response(false, "Пользователь с таким именем уже существует", new Hashtable<>());
+                }
             }
-            boolean success = userRepository.register(request.getArgs()[0], request.getArgs()[1]);
-            if (success) {
-                return new Response(true, "Регистрация успешна", new Hashtable<>());
-            } else {
-                return new Response(false, "Пользователь с таким именем уже существует", new Hashtable<>());
+            case LogInCommand ignored -> {
+                authenticated = userRepository.authenticate(request.getUsername(), request.getPassword());
+            }
+            default -> {
+                if (!authenticated) {
+                    return new Response(false, "Пользователь не авторизован", new Hashtable<>());
+                }
+
             }
         }
-        // Авторизация
-        if (!userRepository.authenticate(request.getUsername(), request.getPassword())) {
-            return new Response(false, "Пользователь не авторизован", new Hashtable<>());
-        }
+
         // Выполнение команды
-        Command command = invoker.getCommandMap().get(commandName);
+
         if (command == null) {
             return new Response(false, "Команда не найдена", new Hashtable<>());
         }
 
-        boolean isModifying = invoker.modifyingCommands.contains(commandName);
-        // Получаем userId по username
         Integer userId = userRepository.getUserId(request.getUsername());
         String[] argsWithUserId;
         if (userId != null) {
@@ -193,8 +214,10 @@ public class Server {
         } else {
             argsWithUserId = request.getArgs();
         }
-        // Добавляем команду в историю пользователя
+
         HistoryKeeper.getInstance().add(commandName, userId);
+
+        boolean isModifying = invoker.modifyingCommands.contains(commandName);
         if (isModifying) {
             collectionLock.lock();
             try {

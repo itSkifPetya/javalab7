@@ -71,7 +71,6 @@ public class CommandHandler {
         long minutesOfWaiting;
         WeaponType weaponType;
         boolean cool;
-        // Переменные для хранения значений
         int coordX = 0;
         double coordY = 0.0;
 

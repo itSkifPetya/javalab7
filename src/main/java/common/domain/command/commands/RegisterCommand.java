@@ -9,10 +9,6 @@ import java.util.Hashtable;
 public class RegisterCommand extends Command {
     @Override
     public Response execute(Hashtable collection, String[] args) {
-        // args не используются, логин и пароль берутся из Request
-        // Получить username и password из Request невозможно напрямую, поэтому используем хак:
-        // username и password должны быть переданы в args (или через Request, если расширить интерфейс)
-        // Здесь args[0] = username, args[1] = password
         if (args.length < 2) {
             return new Response(false, "Недостаточно данных для регистрации", null);
         }

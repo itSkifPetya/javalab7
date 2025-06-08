@@ -13,7 +13,6 @@ public class HistoryCommand extends Command {
     public Response execute(Hashtable<Integer, HumanBeing> collection, String[] args) {
         StringBuilder message = new StringBuilder();
         HistoryKeeper historyKeeper = HistoryKeeper.getInstance();
-        // userId теперь передаётся последним аргументом
         Integer userId = null;
         if (args.length > 0) {
             try {
