@@ -9,7 +9,6 @@ import java.util.Hashtable;
 public class LogInCommand extends Command {
     @Override
     public Response execute(Hashtable<Integer, HumanBeing> collection, String[] args) {
-
         return null;
     }
 }

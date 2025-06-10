@@ -5,9 +5,12 @@ import common.data.models.Request;
 import common.data.models.Response;
 import common.domain.command.*;
 import common.domain.command.commands.LogInCommand;
+import common.domain.command.commands.LogOutCommand;
 import common.domain.command.commands.RegisterCommand;
 import server.data.UserRepository;
 import server.data.RemoteRepository;
+
+import java.io.Console;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
@@ -20,7 +23,6 @@ import java.util.concurrent.locks.ReentrantLock;
 public class Server {
     private static Server instance;
     private static Hashtable<Integer, HumanBeing> globalCollection = new Hashtable<>();
-    private static Hashtable<Integer, HumanBeing> tempCollection = new Hashtable<>();
     public static RemoteRepository remoteRepository;
     public static UserRepository userRepository = new UserRepository();
     private final ExecutorService readPool = Executors.newCachedThreadPool();
@@ -29,6 +31,11 @@ public class Server {
     private static final ReentrantLock collectionLock = new ReentrantLock();
     public static Scanner SCANNER = new Scanner(System.in);
     private static Invoker invoker = Invoker.getInstance();
+    private static Console console = System.console();
+    private Set<SelectionKey> selectedKeys;
+    private Map<SocketChannel, ClientSession> clientSessionMap = new ConcurrentHashMap<>();
+    private int PORT = 0;
+
 
     private Server() {
         invoker.invokerInit();
@@ -42,6 +49,11 @@ public class Server {
     }
 
     public void start() {
+        prepareConnection();
+        management();
+    }
+
+    private void prepareConnection() {
         System.out.println("Запуск сервера...");
         all:
         while (true) {
@@ -57,7 +69,7 @@ public class Server {
             switch (opt) {
                 case 1 -> {
                     System.out.println("Сервер запущен локально + SSH Tunnel для psql");
-                    SSHTunnel tunnel = new SSHTunnel(SCANNER);
+                    SSHTunnel tunnel = new SSHTunnel(console);
                     try {
                         tunnel.psqlTunnel();
                         remoteRepository = new RemoteRepository();
@@ -95,16 +107,22 @@ public class Server {
                 System.out.println("Некорректный ввод. Попробуйте ещё раз");
             }
         }
+
+    }
+
+    private void management() {
         try (ServerSocketChannel serverSocketChannel = ServerSocketChannel.open()) {
             serverSocketChannel.bind(new InetSocketAddress(PORT));
             serverSocketChannel.configureBlocking(false);
-
+            // создаём selector - объект, отслеживающий каналы и их состояние
             Selector selector = Selector.open();
+            // привязка селектора к сокету сервера
             serverSocketChannel.register(selector, SelectionKey.OP_ACCEPT);
+
             System.out.println("Сервер запущен на порту " + PORT);
             while (true) {
                 selector.select();
-                Set<SelectionKey> selectedKeys = selector.selectedKeys();
+                selectedKeys = selector.selectedKeys();
                 Iterator<SelectionKey> iter = selectedKeys.iterator();
                 while (iter.hasNext()) {
                     SelectionKey key = iter.next();
@@ -113,14 +131,19 @@ public class Server {
                         try {
                             SocketChannel client = serverSocketChannel.accept();
                             client.configureBlocking(false);
-                            client.register(selector, SelectionKey.OP_READ);
+                            // регистрация канала как готового к чтению
+                            SelectionKey clientKey = client.register(selector, SelectionKey.OP_READ);
+                            ClientSession cs = new ClientSession(false);
+                            clientKey.attach(cs);
+                            clientSessionMap.put(client, cs);
                             System.out.println("Подключен клиент: " + client.getRemoteAddress());
+
                         } catch (CancelledKeyException e) {
                             System.out.println("Клиент разорвал соединение");
                         }
                     } else if (key.isReadable()) {
                         SocketChannel client = (SocketChannel) key.channel();
-                        readPool.submit(() -> handleRead(client));
+                        readPool.submit(() -> readData(client));
                     }
                 }
             }
@@ -128,8 +151,7 @@ public class Server {
             System.err.println("Ошибка запуска сервера: " + e.getMessage());
         }
     }
-
-    private void handleRead(SocketChannel client) {
+    private void readData(SocketChannel client) {
         ByteBuffer buffer = ByteBuffer.allocate(1024);
         try {
             int bytesRead = client.read(buffer);
@@ -145,14 +167,17 @@ public class Server {
             buffer.get(data);
             processPool.submit(() -> handleRequest(client, data));
         } catch (IOException e) {
-            try { client.close(); } catch (IOException ignored) {}
+            try {
+                client.close();
+            } catch (IOException ignored) {
+            }
         }
     }
 
     private void handleRequest(SocketChannel client, byte[] data) {
         try {
             Request request = (Request) Serializer.getInstance().deserialize(data);
-            Response response = processRequest(request);
+            Response response = processRequest(client, request);
             sendPool.submit(() -> sendResponse(client, response));
         } catch (Exception e) {
             e.printStackTrace(); // Логируем ошибку в консоль
@@ -160,16 +185,16 @@ public class Server {
                 try {
                     Response error = new Response(false, "Ошибка обработки запроса: " + e, new Hashtable<>());
                     sendResponse(client, error);
-                } catch (Exception ignored) {}
+                } catch (Exception ignored) {
+                }
             });
         }
     }
 
-
-    private Response processRequest(Request request) {
+    private Response processRequest(SocketChannel client, Request request) {
         Command command = request.getCommand();
         String commandName = invoker.getCommandName(command);
-        boolean authenticated = false;
+        boolean authenticated = clientSessionMap.get(client).getAuth();
 
         if (commandName == null) {
             return new Response(false, "Неизвестная команда", new Hashtable<>());
@@ -188,9 +213,20 @@ public class Server {
             }
             case LogInCommand ignored -> {
                 authenticated = userRepository.authenticate(request.getUsername(), request.getPassword());
+                clientSessionMap.get(client).setAuth(authenticated);
+                return authenticated
+                        ? new Response(true, "Вы авторизовались", globalCollection)
+                        : new Response(false, "Ошибка входа", new Hashtable<>());
+            } case LogOutCommand ignored -> {
+                if (!authenticated) return new Response(false, "Вы не авторизованы", new Hashtable<>());
+                else {
+                    authenticated = false;
+                    clientSessionMap.get(client).setAuth(authenticated);
+                }
             }
             default -> {
                 if (!authenticated) {
+                    clientSessionMap.get(client).setAuth(authenticated);
                     return new Response(false, "Пользователь не авторизован", new Hashtable<>());
                 }
 
@@ -221,7 +257,7 @@ public class Server {
         if (isModifying) {
             collectionLock.lock();
             try {
-                tempCollection = new Hashtable<>(globalCollection);
+                Hashtable<Integer, HumanBeing> tempCollection = new Hashtable<>(globalCollection);
                 Response resp = command.execute(tempCollection, argsWithUserId);
                 if (resp.isSuccess()) {
                     try {
@@ -250,7 +286,26 @@ public class Server {
                 client.write(buffer);
             }
         } catch (IOException e) {
-            try { client.close(); } catch (IOException ignored) {}
+            try {
+                client.close();
+            } catch (IOException ignored) {
+            }
+        }
+    }
+
+    private class ClientSession {
+        private boolean authenticated;
+
+        ClientSession(boolean authenticated) {
+            this.authenticated = authenticated;
+        }
+
+        public void setAuth(boolean authenticated) {
+            this.authenticated = authenticated;
+        }
+
+        public boolean getAuth() {
+            return authenticated;
         }
     }
 }

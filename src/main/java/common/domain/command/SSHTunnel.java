@@ -4,6 +4,7 @@ import com.jcraft.jsch.JSch;
 import com.jcraft.jsch.JSchException;
 import com.jcraft.jsch.Session;
 
+import java.io.Console;
 import java.util.Scanner;
 
 public class SSHTunnel {
@@ -11,12 +12,12 @@ public class SSHTunnel {
     private static final int PORT = 2222;
     private static final String LOGIN = "s465877";
     private static final String PASSWORD = "zAwm#7410";
-    private Scanner sc;
+    private Console console;
     private Session session;
     private int localPort;
 
-    public SSHTunnel(Scanner sc) {
-        this.sc = sc;
+    public SSHTunnel(Console console) {
+        this.console = console;
     }
 
     public void baseTunnel() throws JSchException {
@@ -24,7 +25,8 @@ public class SSHTunnel {
         while (true) {
             try {
                 System.out.print("Введите порт для ssh-туннеля: ");
-                REMOTE_PORT = Integer.parseInt(sc.nextLine());
+                String temp = console.readLine();
+                REMOTE_PORT = Integer.parseInt(temp);
                 break;
             } catch (NumberFormatException e) {
                 System.out.println("Ошибка ввода. Попробуйте ещё раз");

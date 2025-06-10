@@ -91,14 +91,15 @@ public class Serializer {
         DataInputStream dis = new DataInputStream(bis);
 
         // Читаем длину данных
-        int length = dis.readInt();
-        if (length != data.length - 4) {
-            throw new IOException("Invalid data length");
-        }
+//        int length = dis.readInt();
+//        if (length != data.length - 4) {
+//            throw new IOException("Invalid data length");
+//        }
 
         // Читаем сами данные
-        byte[] objectData = new byte[length];
-        dis.readFully(objectData);
+//        byte[] objectData = new byte[length];
+        byte[] objectData = new byte[data.length];
+        dis.read(objectData);
 
         ByteArrayInputStream objectBis = new ByteArrayInputStream(objectData);
         ObjectInputStream ois = new ObjectInputStream(objectBis);
@@ -131,7 +132,7 @@ public class Serializer {
 
         // Записываем длину и данные в выходной поток
         DataOutputStream dos = new DataOutputStream(os);
-        dos.writeInt(data.length);
+//        dos.writeInt(data.length);
         dos.write(data);
         dos.flush();
     }

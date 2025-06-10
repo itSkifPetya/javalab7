@@ -55,6 +55,7 @@ public class Invoker {
         commandMap.put("group_counting_by_has_toothpick", new GroupCountingByHasToothpickCommand());
         commandMap.put("register", new RegisterCommand());
         commandMap.put("login", new LogInCommand());
+        commandMap.put("logout", new LogOutCommand());
     }
 
     /**

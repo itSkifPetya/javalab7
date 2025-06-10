@@ -20,8 +20,8 @@ public class RemoteRepository implements HumanBeingDAO {
     private static String USER = "s465877";
     private static String PASSWORD = "D7cCg1cMguDJeuwv";
 
-    public RemoteRepository() throws SQLException {
-        DriverManager.getConnection(URL, USER, PASSWORD);
+    public RemoteRepository() {
+//        DriverManager.getConnection(URL, USER, PASSWORD);
     }
 
     public RemoteRepository(String url, String user, String password) throws SQLException {

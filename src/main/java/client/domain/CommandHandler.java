@@ -6,6 +6,7 @@ import common.domain.command.Command;
 import common.domain.command.DataCollector;
 import common.domain.command.Invoker;
 
+import java.io.Console;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -61,7 +62,7 @@ public class CommandHandler {
     private String[] dataCollectorArgsBuilder(DataCollector command, String[] args) {
         String key = args[0];
         ArrayList<String> argsList = new ArrayList<>(List.of(key));
-        Scanner sc = Client.getSCANNER();
+        Console console = Client.getConsole();
         String inp;
         String name;
         Boolean realHero;
@@ -78,7 +79,7 @@ public class CommandHandler {
         while (true) {
             try {
                 System.out.print("Введите имя пострадавшего: ");
-                name = sc.nextLine();
+                name = console.readLine();
                 if (name == null || name.trim().isEmpty()) {
                     throw new IllegalArgumentException("Имя не может быть пустым.");
                 }
@@ -93,7 +94,7 @@ public class CommandHandler {
         while (true) {
             try {
                 System.out.print("Введите X координату (int): ");
-                inp = sc.nextLine();
+                inp = console.readLine();
                 if (inp == null || inp.trim().isEmpty()) {
                     throw new IllegalArgumentException("Это поле не может быть пустым.");
                 }
@@ -109,7 +110,7 @@ public class CommandHandler {
         while (true) {
             try {
                 System.out.print("Введите Y координату (double): ");
-                inp = sc.nextLine();
+                inp = console.readLine();
                 if (inp == null || inp.trim().isEmpty()) {
                     throw new IllegalArgumentException("Это поле не может быть пустым.");
                 }
@@ -122,17 +123,17 @@ public class CommandHandler {
         argsList.add(String.valueOf(coordY));
 
         // Ввод realHero
-        realHero = readBoolean(sc, "Реальный герой (boolean)? (true/false): ");
+        realHero = readBoolean(console, "Реальный герой (boolean)? (true/false): ");
         argsList.add(String.valueOf(realHero));
 
         // Ввод hasToothpick
-        hasToothpick = readBoolean(sc, "Есть зубочистка (boolean)? (true/false): ");
+        hasToothpick = readBoolean(console, "Есть зубочистка (boolean)? (true/false): ");
         argsList.add(String.valueOf(hasToothpick));
 
         while (true) {
             try {
                 System.out.print("Введите скорость столкновения (double): ");
-                inp = sc.nextLine();
+                inp = console.readLine();
                 if (inp == null || inp.trim().isEmpty()) {
                     impactSpeed = 0;
                 } else {
@@ -148,7 +149,7 @@ public class CommandHandler {
         while (true) {
             try {
                 System.out.print("Введите название трека: ");
-                soundtrackName = sc.nextLine();
+                soundtrackName = console.readLine();
                 if (soundtrackName == null || soundtrackName.trim().isEmpty()) {
                     throw new IllegalArgumentException("Поле не может быть пустым.");
                 }
@@ -162,7 +163,7 @@ public class CommandHandler {
         while (true) {
             try {
                 System.out.print("Введите время ожидания (long): ");
-                inp = sc.nextLine();
+                inp = console.readLine();
                 if (inp == null || inp.trim().isEmpty()) {
                     minutesOfWaiting = 0;
                 } else {
@@ -178,7 +179,7 @@ public class CommandHandler {
         while (true) {
             try {
                 System.out.println("Введите тип оружия: \nAXE\nPISTOL\nSHOTGUN\nMACHINE_GUN\nBAT");
-                weaponType = WeaponType.valueOf(sc.nextLine());
+                weaponType = WeaponType.valueOf(console.readLine());
                 break; // Выход из цикла, если ввод корректен
             } catch (IllegalArgumentException e) {
                 System.out.println("Ошибка: Введите один из доступных типов оружия.");
@@ -186,15 +187,15 @@ public class CommandHandler {
         }
         argsList.add(String.valueOf(weaponType));
 
-        cool = readBoolean(sc, "Крутая машина (boolean)? (true/false): ");
+        cool = readBoolean(console, "Крутая машина (boolean)? (true/false): ");
         argsList.add(String.valueOf(cool));
         return argsList.toArray(String[]::new);
     }
 
-    private boolean readBoolean(Scanner sc, String promt) {
+    private boolean readBoolean(Console console, String promt) {
         while (true) {
             System.out.print(promt);
-            String input = sc.nextLine();
+            String input = console.readLine();
             if (input.equals("true") || input.equals("false")) {
                 return Boolean.parseBoolean(input);
             }
