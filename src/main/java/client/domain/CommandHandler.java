@@ -5,16 +5,27 @@ import common.data.models.Request;
 import common.domain.command.Command;
 import common.domain.command.DataCollector;
 import common.domain.command.Invoker;
+import common.domain.command.commands.LogInCommand;
+import common.domain.command.commands.RegisterCommand;
 
 import java.io.Console;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
-import java.util.Scanner;
-import java.util.stream.Collectors;
 
 public class CommandHandler {
     private static CommandHandler instance;
+    private String username = "";
+    private Console CONSOLE = Client.getConsole();
+
+    public String getPassword() {
+        return password;
+    }
+
+    public String getUsername() {
+        return username;
+    }
+
+    private String password = "";
 
     private CommandHandler() {
     }
@@ -29,10 +40,22 @@ public class CommandHandler {
     public Request collectRequest(String commandName, String[] args, String username, String password) {
         Command command = handle(commandName, args);
         String[] newArgs = args;
-        if (command instanceof DataCollector) {
-            newArgs = dataCollectorArgsBuilder((DataCollector) command, args);
+        switch (command) {
+            case DataCollector ignored -> newArgs = dataCollectorArgsBuilder(args);
+            case RegisterCommand ignored -> {
+                newArgs = registerDataCollector();
+                username = newArgs[0];
+                password = newArgs[1];
+            }
+            case LogInCommand ignored -> {
+                newArgs = loginDataCollector();
+                username = newArgs[0];
+                password = newArgs[1];
+            }
+            default -> {
+                return new Request(command, args, username, password);
+            }
         }
-
         return new Request(command, newArgs, username, password);
     }
 
@@ -48,7 +71,8 @@ public class CommandHandler {
 //            System.out.println(command);
 
         } catch (Exception e) {
-            System.out.println("Такой команды нет. Для подробной информации используйте help");
+            CONSOLE.printf("Такой команды нет. Для подробной информации используйте help");
+//            System.out.println("Такой команды нет. Для подробной информации используйте help");
         }
 //        System.out.println(commandName);
         if (command != null && args.length != command.getArgsCount()) {
@@ -59,7 +83,7 @@ public class CommandHandler {
         return command;
     }
 
-    private String[] dataCollectorArgsBuilder(DataCollector command, String[] args) {
+    private String[] dataCollectorArgsBuilder(String[] args) {
         String key = args[0];
         ArrayList<String> argsList = new ArrayList<>(List.of(key));
         Console console = Client.getConsole();
@@ -192,6 +216,51 @@ public class CommandHandler {
         return argsList.toArray(String[]::new);
     }
 
+    public String[] registerDataCollector() {
+        ArrayList<String> newArgs =  new ArrayList<>(2);
+        Console CONSOLE = Client.getConsole();
+        while (true) {
+            try {
+                System.out.print("Логин: ");
+                newArgs.add(CONSOLE.readLine());
+                System.out.print("Пароль: ");
+                newArgs.add(new String(CONSOLE.readPassword()));
+                System.out.print("Повторите пароль: ");
+                newArgs.add(new String(CONSOLE.readPassword()));
+                if (newArgs.get(1).equals(newArgs.get(2))) {
+//                    username = newArgs.get(0);
+//                    password = newArgs.get(1);
+                    break;
+                }
+                else {
+                    System.err.println("Пароли не совпадают.");
+                }
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        }
+        return newArgs.toArray(String[]::new);
+    }
+
+    private String[] loginDataCollector() {
+        ArrayList<String> newArgs =  new ArrayList<>(2);
+        Console CONSOLE = Client.getConsole();
+        while (true) {
+            try {
+                System.out.print("Логин: ");
+                newArgs.add(CONSOLE.readLine());
+                System.out.print("Пароль: ");
+                newArgs.add(new String(CONSOLE.readPassword()));
+                username = newArgs.get(0);
+                password = newArgs.get(1);
+                break;
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        }
+        return newArgs.toArray(String[]::new);
+    }
+
     private boolean readBoolean(Console console, String promt) {
         while (true) {
             System.out.print(promt);
@@ -203,6 +272,12 @@ public class CommandHandler {
         }
     }
 
+    public void setUsername(String username) {
+        this.username = username;
+    }
 
+    public void setPassword(String password) {
+        this.password = password;
+    }
 }
 

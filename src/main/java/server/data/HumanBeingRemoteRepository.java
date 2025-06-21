@@ -15,27 +15,22 @@ import common.data.models.HumanBeingModel.HumanBeing;
 import common.data.models.HumanBeingModel.WeaponType;
 import server.domain.DAO.HumanBeingDAO;
 
-public class RemoteRepository implements HumanBeingDAO {
+public class HumanBeingRemoteRepository implements HumanBeingDAO {
     private static String URL = "jdbc:postgresql://localhost:5432/studs";
     private static String USER = "s465877";
     private static String PASSWORD = "D7cCg1cMguDJeuwv";
 
-    public RemoteRepository() {
-//        DriverManager.getConnection(URL, USER, PASSWORD);
-    }
+    public HumanBeingRemoteRepository() {}
 
-    public RemoteRepository(String url, String user, String password) throws SQLException {
+    public HumanBeingRemoteRepository(String url, String user, String password) throws SQLException {
         URL = url;
         USER = user;
         PASSWORD = password;
-        DriverManager.getConnection(URL, USER, PASSWORD);
     }
 
     @Override
     public void writeData(Hashtable<Integer, HumanBeing> collection) {
-        // референс для prepared statement
-        String insertSql = "INSERT INTO human_beings (id, name, coord_x, coord_y, creation_date, real_hero, has_toothpick, impact_speed, soundtrack_name, minutes_of_waiting, weapon_type, car_cool, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-
+        String insertSql = "INSERT INTO human_beings (id, name, coord_x, coord_y, creation_date, real_hero, has_toothpick, impact_speed, soundtrack_name, minutes_of_waiting, weapon_type, car_cool, user_id)" + " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)" + " ON CONFLICT (id) DO NOTHING";
         try (Connection conn = DriverManager.getConnection(URL, USER, PASSWORD);) {
             // ручное управление транзакциями
             conn.setAutoCommit(false);
@@ -60,12 +55,9 @@ public class RemoteRepository implements HumanBeingDAO {
                 }
                 // отправка пакета запросов
                 ps.executeBatch();
-                // коммит в бд
+
+                // сохранение результата
                 conn.commit();
-            } catch (SQLException e) {
-                // откат бд в случае ошибки
-                conn.rollback();
-                e.printStackTrace();
             }
         } catch (SQLException e) {
             e.printStackTrace();
@@ -95,20 +87,7 @@ public class RemoteRepository implements HumanBeingDAO {
                 boolean carCool = rs.getBoolean("car_cool");
                 int userId = rs.getInt("user_id");
 
-                HumanBeing hb = HumanBeing.insertHumanBeing(
-                        id,
-                        name,
-                        new Coordinates(coordX, coordY),
-                        creationDate,
-                        realHero,
-                        hasToothpick,
-                        impactSpeed,
-                        soundtrackName,
-                        minutesOfWaiting,
-                        WeaponType.valueOf(weaponType),
-                        new Car(carCool),
-                        userId
-                );
+                HumanBeing hb = HumanBeing.insertHumanBeing(id, name, new Coordinates(coordX, coordY), creationDate, realHero, hasToothpick, impactSpeed, soundtrackName, minutesOfWaiting, WeaponType.valueOf(weaponType), new Car(carCool), userId);
                 collection.put(id, hb);
             }
         } catch (SQLException e) {

@@ -6,7 +6,7 @@ import java.math.BigInteger;
 import java.security.MessageDigest;
 import java.sql.*;
 
-public class UserRepository implements UserDAO {
+public class UserRemoteRepository implements UserDAO {
     private static final String URL = "jdbc:postgresql://localhost:5432/studs";
     private static final String USER = "s465877";
     private static final String PASSWORD = "D7cCg1cMguDJeuwv";

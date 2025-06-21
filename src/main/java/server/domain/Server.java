@@ -7,8 +7,8 @@ import common.domain.command.*;
 import common.domain.command.commands.LogInCommand;
 import common.domain.command.commands.LogOutCommand;
 import common.domain.command.commands.RegisterCommand;
-import server.data.UserRepository;
-import server.data.RemoteRepository;
+import server.data.HumanBeingRemoteRepository;
+import server.data.UserRemoteRepository;
 
 import java.io.Console;
 import java.io.IOException;
@@ -23,14 +23,15 @@ import java.util.concurrent.locks.ReentrantLock;
 public class Server {
     private static Server instance;
     private static Hashtable<Integer, HumanBeing> globalCollection = new Hashtable<>();
-    public static RemoteRepository remoteRepository;
-    public static UserRepository userRepository = new UserRepository();
+    public static HumanBeingRemoteRepository humanBeingRemoteRepository;
+    public static UserRemoteRepository userRemoteRepository = new UserRemoteRepository();
     private final ExecutorService readPool = Executors.newCachedThreadPool();
     private final ExecutorService processPool = Executors.newFixedThreadPool(8);
     private final ForkJoinPool sendPool = new ForkJoinPool();
     private static final ReentrantLock collectionLock = new ReentrantLock();
     public static Scanner SCANNER = new Scanner(System.in);
     private static Invoker invoker = Invoker.getInstance();
+    private final HistoryKeeper historyKeeper = HistoryKeeper.getInstance();
     private static Console console = System.console();
     private Set<SelectionKey> selectedKeys;
     private Map<SocketChannel, ClientSession> clientSessionMap = new ConcurrentHashMap<>();
@@ -72,7 +73,7 @@ public class Server {
                     SSHTunnel tunnel = new SSHTunnel(console);
                     try {
                         tunnel.psqlTunnel();
-                        remoteRepository = new RemoteRepository();
+                        humanBeingRemoteRepository = new HumanBeingRemoteRepository();
                     } catch (SQLException e) {
                         e.printStackTrace();
                         continue;
@@ -85,7 +86,7 @@ public class Server {
                 case 2 -> {
                     System.out.println("Сервер запущен на гелиосе");
                     try {
-                        remoteRepository = new RemoteRepository("jdbc:postgresql://pg:5432/studs", "s465877", "D7cCg1cMguDJeuwv");
+                        humanBeingRemoteRepository = new HumanBeingRemoteRepository("jdbc:postgresql://pg:5432/studs", "s465877", "D7cCg1cMguDJeuwv");
                     } catch (SQLException e) {
                         e.printStackTrace();
                         continue;
@@ -95,9 +96,9 @@ public class Server {
                 default -> System.out.println("Некорректный ввод. Попробуйте ещё раз");
             }
         }
-        globalCollection = remoteRepository.readData();
+        globalCollection = humanBeingRemoteRepository.readData();
 
-        int PORT = 0;
+//        int PORT = 0;
         while (true) {
             try {
                 System.out.print("Введите порт: ");
@@ -194,26 +195,27 @@ public class Server {
     private Response processRequest(SocketChannel client, Request request) {
         Command command = request.getCommand();
         String commandName = invoker.getCommandName(command);
-        boolean authenticated = clientSessionMap.get(client).getAuth();
+        ClientSession session = clientSessionMap.get(client);
+        boolean authenticated = session.getAuth();
 
-        if (commandName == null) {
-            return new Response(false, "Неизвестная команда", new Hashtable<>());
+        try {
+            System.out.println("[" + client.getRemoteAddress().toString()  + "] " + "\u001B[32m" + commandName + "\u001B[0m");
+        } catch (IOException e) {
+            throw new RuntimeException(e);
         }
         switch (command) {
             case RegisterCommand ignored -> {
-                if (request.getArgs().length < 2) {
-                    return new Response(false, "Необходимо указать логин и пароль", new Hashtable<>());
-                }
-                boolean success = userRepository.register(request.getArgs()[0], request.getArgs()[1]);
-                if (success) {
-                    return new Response(true, "Регистрация успешна", new Hashtable<>());
-                } else {
-                    return new Response(false, "Пользователь с таким именем уже существует", new Hashtable<>());
-                }
+                return command.execute(null, request.getArgs());
             }
             case LogInCommand ignored -> {
-                authenticated = userRepository.authenticate(request.getUsername(), request.getPassword());
+
+                if (clientSessionMap.values().stream()
+                        .anyMatch(s -> s.userId != null && s.userId.equals(userRemoteRepository.getUserId(request.getUsername())))) {
+                    return new Response(false, "Данный аккаунт уже используется на клиенте", new Hashtable<>());
+                }
+                authenticated = userRemoteRepository.authenticate(request.getUsername(), request.getPassword());
                 clientSessionMap.get(client).setAuth(authenticated);
+                session.setUserId(userRemoteRepository.getUserId(request.getUsername()));
                 return authenticated
                         ? new Response(true, "Вы авторизовались", globalCollection)
                         : new Response(false, "Ошибка входа", new Hashtable<>());
@@ -222,6 +224,7 @@ public class Server {
                 else {
                     authenticated = false;
                     clientSessionMap.get(client).setAuth(authenticated);
+                    return new Response(false, "Вы деавторизовались", new Hashtable<>());
                 }
             }
             default -> {
@@ -233,13 +236,7 @@ public class Server {
             }
         }
 
-        // Выполнение команды
-
-        if (command == null) {
-            return new Response(false, "Команда не найдена", new Hashtable<>());
-        }
-
-        Integer userId = userRepository.getUserId(request.getUsername());
+        Integer userId = session.getUserId();
         String[] argsWithUserId;
         if (userId != null) {
             // Добавляем userId в конец args
@@ -251,7 +248,7 @@ public class Server {
             argsWithUserId = request.getArgs();
         }
 
-        HistoryKeeper.getInstance().add(commandName, userId);
+        historyKeeper.add(commandName, userId);
 
         boolean isModifying = invoker.modifyingCommands.contains(commandName);
         if (isModifying) {
@@ -261,7 +258,7 @@ public class Server {
                 Response resp = command.execute(tempCollection, argsWithUserId);
                 if (resp.isSuccess()) {
                     try {
-                        remoteRepository.writeData(tempCollection);
+                        humanBeingRemoteRepository.writeData(tempCollection);
                         globalCollection = tempCollection;
                         return new Response(true, resp.getMessage(), globalCollection);
                     } catch (Exception e) {
@@ -295,9 +292,18 @@ public class Server {
 
     private class ClientSession {
         private boolean authenticated;
+        private Integer userId;
 
         ClientSession(boolean authenticated) {
             this.authenticated = authenticated;
+        }
+
+        public Integer getUserId() {
+            return userId;
+        }
+
+        public void setUserId(Integer userId) {
+            this.userId = userId;
         }
 
         public void setAuth(boolean authenticated) {

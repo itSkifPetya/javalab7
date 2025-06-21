@@ -6,12 +6,10 @@ import common.data.models.Response;
 import common.domain.command.SSHTunnel;
 import common.domain.command.Serializer;
 
-import javax.sound.midi.Soundbank;
 import java.io.*;
 import java.net.Socket;
 import java.util.Arrays;
 import java.util.InputMismatchException;
-import java.util.Scanner;
 
 public class Client {
     private static Client instance;
@@ -52,9 +50,8 @@ public class Client {
                         System.out.print("Введите порт: ");
                         PORT = Integer.parseInt(CONSOLE.readLine());
                         break;
-                    } catch (InputMismatchException e) {
-                        System.out.println(e);
-                        CONSOLE.readLine();
+                    } catch (NumberFormatException e) {
+                        System.err.println("Ошибка формата");
                     }
                 }
             }
@@ -69,6 +66,7 @@ public class Client {
                 PORT = tunnel.getLocalPort();
             }
         }
+        System.out.println(PORT);
         // порт зависит от opt
         try (Socket socket = new Socket("localhost", PORT)) {
             InputStream is = socket.getInputStream();
@@ -80,39 +78,26 @@ public class Client {
                 int choice = Integer.parseInt(CONSOLE.readLine());
                 switch (choice) {
                     case 1 -> {
-                        System.out.print("Логин: ");
-                        username = CONSOLE.readLine();
-                        System.out.print("Пароль: ");
-//                        password = CONSOLE.readLine();
-                        password = new String(CONSOLE.readPassword());
-                        Request loginRequest = handler.collectRequest("login", new String[]{}, username, password);
-//                        Request testRequest = handler.collectRequest("info", new String[]{}, username, password);
+                        Request loginRequest = handler.collectRequest("login", new String[]{}, "", "");
                         serializer.serialize(loginRequest, os);
-                        Response testResponse = (Response) serializer.deserialize(is);
-                        if (testResponse.isSuccess()) {
-                            System.out.println("Авторизация успешна!");
+                        Response loginResponse = (Response) serializer.deserialize(is);
+                        if (loginResponse.isSuccess()) {
+                            System.out.println(loginResponse.getMessage());
                             authenticated = true;
+                            username = handler.getUsername();
+                            password = handler.getPassword();
+                            handler.setUsername("");
+                            handler.setPassword("");
                         } else {
-                            System.out.println("Ошибка авторизации: " + testResponse.getMessage());
+                            System.out.println("Ошибка авторизации: " + loginResponse.getMessage());
                         }
                     }
                     case 2 -> {
-                        System.out.print("Придумайте логин: ");
-                        username = CONSOLE.readLine();
-                        System.out.print("Придумайте пароль: ");
-                        password = new String(CONSOLE.readPassword());
-                        System.out.print("Введите пароль ещё раз: ");
-                        checkpassword = new String(CONSOLE.readPassword());
-                        if (!password.equals(checkpassword)) {
-                            System.out.println("Пароли не совпадают.");
-                            continue;
-                        }
-                        String[] args = new String[]{username, password};
-                        Request regRequest = handler.collectRequest("register", args, username, password);
+                        Request regRequest = handler.collectRequest("register", new String[]{}, "", "");
                         serializer.serialize(regRequest, os);
                         Response regResponse = (Response) serializer.deserialize(is);
                         if (regResponse.isSuccess()) {
-                            System.out.println("Регистрация успешна! Теперь войдите.");
+                            System.out.println(regResponse.getMessage());
                         } else {
                             System.out.println("Ошибка регистрации: " + regResponse.getMessage());
                         }
@@ -135,8 +120,13 @@ public class Client {
                         .toList()
                         .toArray(new String[0])
                         : new String[0];
-                Request request = handler.collectRequest(commandName, args, username, password);
-                serializer.serialize(request, os);
+                try {
+                    Request request = handler.collectRequest(commandName, args, username, password);
+                    serializer.serialize(request, os);
+                } catch (NullPointerException e) {
+                    System.out.println("Команда не найдена. Повторите попытку");
+                    continue;
+                }
                 Response response = (Response) serializer.deserialize(is);
                 System.out.println(response.getMessage());
             }

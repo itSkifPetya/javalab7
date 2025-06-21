@@ -24,7 +24,7 @@ public class SSHTunnel {
         int REMOTE_PORT;
         while (true) {
             try {
-                System.out.print("Введите порт для ssh-туннеля: ");
+                System.out.print("Введите порт, на котором запущен сервер: ");
                 String temp = console.readLine();
                 REMOTE_PORT = Integer.parseInt(temp);
                 break;
@@ -36,11 +36,13 @@ public class SSHTunnel {
         JSch jSch = new JSch();
         session = jSch.getSession(LOGIN, SSH_HOST, PORT);
         session.setPassword(PASSWORD);
+
         // отключение проверки подлинности ключа хоста
         session.setConfig("StrictHostKeyChecking", "no");
 
         session.connect();
-        // получаем локальный порт для подключения через туннель
+        // получаем локальный порт для подключения через туннель, 0 - автоматический выбор свободного локального порта
+
         localPort = session.setPortForwardingL(0, "localhost", REMOTE_PORT);
 
         System.out.println("SSH-туннель создан: localhost:" + localPort + " -> " + SSH_HOST + ":" + REMOTE_PORT);
